@@ -1,0 +1,22 @@
+{
+  "byEmail": {
+    "braamakamara@gmail.com": {
+      "plan": "pro",
+      "status": "active",
+      "customerId": "cus_TPV6oSFtiO6YyI",
+      "subscriptionId": null,
+      "updatedAt": "2025-11-12T00:00:00.000Z"
+    },
+    "ibrahimkamara930@gmail.com": {
+      "plan": "pro",
+      "status": "active",
+      "customerId": "cus_TPVrv0UGPfb7AK",
+      "subscriptionId": "sub_1SSgqD0lEXmU0iUYlKppwMGZ",
+      "updatedAt": "2025-11-12T16:24:22.065Z"
+    }
+  },
+  "byCustomer": {
+    "cus_TPV6oSFtiO6YyI": "braamakamara@gmail.com",
+    "cus_TPVrv0UGPfb7AK": "ibrahimkamara930@gmail.com"
+  }
+}
