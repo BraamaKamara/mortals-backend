@@ -1,5 +1,6 @@
 // MORTALS Dashboard - Email Verification Backend
 // Minimal Express server for email verification only
+// Version: 1.0.2 (AI Routes Deployment Fix)
 
 const express = require('express');
 const cors = require('cors');
