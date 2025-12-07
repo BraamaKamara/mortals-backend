@@ -39,15 +39,14 @@ async function migrate() {
         updated_at TIMESTAMP DEFAULT NOW(),
         
         -- Ensure one spiral per user per day
-        UNIQUE(user_id, date),
-        INDEX idx_user_date (user_id, date)
+        UNIQUE(user_id, date)
       );
     `;
 
     await db.query(createTableQuery);
     console.log('[Identity Spiral] ✅ Table created: identity_spiral');
 
-    // Create index for efficient queries
+    // Create index for efficient queries (PostgreSQL syntax)
     const indexQuery = `
       CREATE INDEX IF NOT EXISTS idx_identity_spiral_user_date 
       ON identity_spiral(user_id, date DESC);
