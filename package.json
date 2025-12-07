@@ -1,6 +1,6 @@
 {
   "name": "mortals-email-verification",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Email verification backend for MORTALS Dashboard",
   "main": "index.js",
   "scripts": {
