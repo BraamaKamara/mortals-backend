@@ -18,6 +18,8 @@ const notificationsRoutes = require('./routes/notifications');
 const messagesRoutes = require('./routes/messages');
 const bookmarksRoutes = require('./routes/bookmarks');
 const moderationRoutes = require('./routes/moderation');
+const reflectionRoutes = require('./routes/reflection');
+const aiRoutes = require('./routes/ai');
 const auth = require('./auth');
 
 const app = express();
@@ -47,6 +49,7 @@ function createTransporter() {
   if (hasCustomSmtp) {
     const secure = String(process.env.SMTP_SECURE || '').toLowerCase();
     const secureBool = secure === 'true' || secure === '1';
+    console.log('[Email] Using custom SMTP:', { host: process.env.SMTP_HOST, port: process.env.SMTP_PORT, secure: secureBool });
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT) || 587,
@@ -54,21 +57,37 @@ function createTransporter() {
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
-      }
+      },
+      logger: process.env.NODE_ENV !== 'production',
+      debug: process.env.NODE_ENV !== 'production'
     });
   }
 
   // Default to service-based transport (gmail by default)
+  console.log('[Email] Using service:', process.env.EMAIL_SERVICE || 'gmail', 'with user:', process.env.EMAIL_USER);
   return nodemailer.createTransport({
     service: process.env.EMAIL_SERVICE || 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD
-    }
+    },
+    logger: process.env.NODE_ENV !== 'production',
+    debug: process.env.NODE_ENV !== 'production'
   });
 }
 
 const transporter = createTransporter();
+
+// Test transporter on startup
+if (process.env.NODE_ENV !== 'production') {
+  transporter.verify((error, success) => {
+    if (error) {
+      console.error('[Email] Transporter verification failed:', error);
+    } else {
+      console.log('[Email] Transporter ready:', success);
+    }
+  });
+}
 
 // Generate 6-digit PIN
 function generatePIN() {
@@ -254,8 +273,24 @@ async function sendVerificationEmail({ email, username }) {
   // Generate PIN
   const pin = generatePIN();
 
+  const emailLower = email.toLowerCase();
+
+  const emailConfigured = process.env.EMAIL_USER && process.env.EMAIL_PASSWORD;
+  if (!emailConfigured) {
+    // Email credentials missing; store PIN so verification can still work and return it to the caller
+    verificationCodes.set(emailLower, {
+      pin,
+      timestamp: Date.now(),
+      attempts: 0
+    });
+
+    console.warn('[Email] EMAIL_USER or EMAIL_PASSWORD missing; returning PIN without sending email.');
+
+    return { expiresIn: 600, pin, delivery: 'skipped' };
+  }
+
   // Store PIN with timestamp
-  verificationCodes.set(email.toLowerCase(), {
+  verificationCodes.set(emailLower, {
     pin,
     timestamp: Date.now(),
     attempts: 0
@@ -263,7 +298,7 @@ async function sendVerificationEmail({ email, username }) {
 
   const mailOptions = {
     from: `"MORTALS Dashboard" <${process.env.EMAIL_USER}>`,
-    to: email,
+    to: emailLower,
     subject: 'MORTALS - Email Verification Code',
     html: `
         <!DOCTYPE html>
@@ -334,12 +369,21 @@ async function sendVerificationEmail({ email, username }) {
       `
   };
 
-  // Send email
-  await transporter.sendMail(mailOptions);
-
-  console.log(`Verification PIN sent to ${email}: ${pin}`);
-
-  return { expiresIn: 600 };
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Verification PIN sent to ${emailLower}: ${pin}`);
+    return { expiresIn: 600, delivery: 'email' };
+  } catch (err) {
+    console.error('[Email] sendMail error:', {
+      message: err.message,
+      code: err.code,
+      response: err.response,
+      command: err.command,
+      rejectedRecipients: err.rejectedRecipients
+    });
+    // Fallback: allow flow to continue by returning the PIN when email fails
+    return { expiresIn: 600, pin, delivery: 'failed', error: err.message };
+  }
 }
 
 // Send verification PIN
@@ -351,12 +395,19 @@ app.post('/api/send-verification', async (req, res) => {
       return res.status(400).json({ error: 'Valid email address required' });
     }
 
-    const { expiresIn } = await sendVerificationEmail({ email, username });
+    const { expiresIn, pin, delivery } = await sendVerificationEmail({ email, username });
 
     res.json({ 
       success: true, 
-      message: 'Verification code sent to your email',
-      expiresIn
+      message: delivery === 'skipped'
+        ? 'Email sending is not configured. Use the provided code to verify.'
+        : delivery === 'failed'
+          ? 'Email sending failed. Use the provided code to verify.'
+          : 'Verification code sent to your email',
+      expiresIn,
+      // Return the PIN when email delivery is skipped or fails so the user can proceed
+      pin: (delivery === 'skipped' || delivery === 'failed') ? pin : undefined,
+      delivery: delivery || 'email'
     });
 
   } catch (error) {
@@ -483,6 +534,12 @@ app.use('/api/notifications', notificationsRoutes);
 
 // --- Moderation Routes ---
 // app.use('/api/moderation', moderationRoutes);
+
+// --- Reflection Suite Routes (Phase 2) ---
+app.use('/api/reflection', auth.authenticateToken, reflectionRoutes);
+
+// --- AI Insights Routes (Phase 3) ---
+app.use('/api/ai', auth.authenticateToken, aiRoutes);
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
