@@ -2,6 +2,7 @@
 // Endpoints for presence index, continuity tracker, ethical nudges, ethical reflections
 const express = require('express');
 const db = require('../db');
+const spiralService = require('../spiralService');
 const router = express.Router();
 
 // Note: Authentication middleware is applied at app.use level in index.js
@@ -456,5 +457,169 @@ router.get('/moral-presence-history/:hours', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch moral presence history' });
   }
 });
+
+// ============================================================================
+// DEGREES OF SELF - IDENTITY SPIRAL ENDPOINTS (McMahan Enhancement)
+// ============================================================================
+
+/**
+ * POST /api/reflection/identity-spiral/:date
+ * Calculate and cache identity spiral for a specific date
+ */
+router.post('/identity-spiral/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    const userId = req.userId;
+
+    // Validate date format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
+    }
+
+    // Calculate continuity dimensions
+    const continuity = await spiralService.calculateContinuity(userId, date);
+
+    // Save to database
+    const result = await spiralService.saveSpiral(userId, date, continuity);
+
+    res.json({
+      success: true,
+      spiral: result,
+      interpretation: interpretSpiral(continuity)
+    });
+  } catch (error) {
+    console.error('[Identity Spiral] Calculation error:', error);
+    res.status(500).json({ error: 'Failed to calculate identity spiral' });
+  }
+});
+
+/**
+ * GET /api/reflection/identity-spiral/:date
+ * Get cached spiral for a date (generates if missing)
+ */
+router.get('/identity-spiral/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    const userId = req.userId;
+
+    // Validate date
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
+    }
+
+    const spiral = await spiralService.getSpiral(userId, date);
+
+    res.json({
+      success: true,
+      spiral: spiral,
+      interpretation: interpretSpiral({
+        memory_continuity: spiral.memory_continuity,
+        intention_continuity: spiral.intention_continuity,
+        value_continuity: spiral.value_continuity,
+        narrative_continuity: spiral.narrative_continuity,
+        overall_unity: spiral.overall_unity
+      })
+    });
+  } catch (error) {
+    console.error('[Identity Spiral] Fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch identity spiral' });
+  }
+});
+
+/**
+ * GET /api/reflection/identity-spiral-trend
+ * Get spiral trend for past N days (default 30)
+ */
+router.get('/identity-spiral-trend', async (req, res) => {
+  try {
+    const userId = req.userId;
+    const days = parseInt(req.query.days) || 30;
+
+    const trend = await spiralService.getSpiralTrend(userId, days);
+
+    // Calculate statistics
+    const stats = {
+      count: trend.length,
+      average_unity: trend.length > 0 
+        ? trend.reduce((sum, t) => sum + t.overall_unity, 0) / trend.length
+        : 0,
+      highest_unity: trend.length > 0 
+        ? Math.max(...trend.map(t => t.overall_unity))
+        : 0,
+      lowest_unity: trend.length > 0 
+        ? Math.min(...trend.map(t => t.overall_unity))
+        : 0,
+      trend_direction: calculateTrend(trend)
+    };
+
+    res.json({
+      success: true,
+      trend: trend,
+      stats: stats
+    });
+  } catch (error) {
+    console.error('[Identity Spiral] Trend error:', error);
+    res.status(500).json({ error: 'Failed to fetch spiral trend' });
+  }
+});
+
+/**
+ * Helper: Interpret spiral qualities in human-readable text
+ */
+function interpretSpiral(continuity) {
+  const unity = continuity.overall_unity;
+  let interpretation = '';
+
+  if (unity > 0.8) {
+    interpretation = 'Highly unified self. Your identity feels coherent and stable.';
+  } else if (unity > 0.6) {
+    interpretation = 'Well-integrated. Your various dimensions of self are aligned.';
+  } else if (unity > 0.4) {
+    interpretation = 'Moderate fragmentation. Some aspects of your identity feel disconnected.';
+  } else {
+    interpretation = 'Significantly fragmented. Your identity feels scattered—consider pausing to reconnect.';
+  }
+
+  // Add specific insights
+  const weakest = Math.min(
+    continuity.memory_continuity,
+    continuity.intention_continuity,
+    continuity.value_continuity,
+    continuity.narrative_continuity
+  );
+
+  if (weakest === continuity.memory_continuity) {
+    interpretation += ' Your memory of past commitments feels weak.';
+  } else if (weakest === continuity.intention_continuity) {
+    interpretation += ' You\'re struggling to follow through on intentions.';
+  } else if (weakest === continuity.value_continuity) {
+    interpretation += ' Your actions don\'t align with your stated values.';
+  } else if (weakest === continuity.narrative_continuity) {
+    interpretation += ' Your day lacks coherent narrative—what\'s the story?';
+  }
+
+  return interpretation;
+}
+
+/**
+ * Helper: Determine trend direction (improving/declining/stable)
+ */
+function calculateTrend(spiralArray) {
+  if (spiralArray.length < 2) return 'stable';
+
+  const recent = spiralArray.slice(-7);
+  const older = spiralArray.slice(-14, -7);
+
+  if (recent.length === 0 || older.length === 0) return 'stable';
+
+  const recentAvg = recent.reduce((sum, t) => sum + t.overall_unity, 0) / recent.length;
+  const olderAvg = older.reduce((sum, t) => sum + t.overall_unity, 0) / older.length;
+
+  const change = recentAvg - olderAvg;
+
+  if (change > 0.1) return 'improving';
+  if (change < -0.1) return 'declining';
+  return 'stable';
+}
 
 module.exports = router;
