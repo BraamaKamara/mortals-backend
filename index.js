@@ -26,7 +26,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: [
+      process.env.CLIENT_URL || 'http://localhost:3000',
+      'https://mortals-dashboard.vercel.app',
+      'https://mortals-dashboard-5akyflysd-braamakamaras-projects.vercel.app'
+    ],
     methods: ['GET', 'POST']
   }
 });
@@ -36,7 +40,15 @@ const PORT = process.env.PORT || 3001;
 const verificationCodes = new Map();
 
 // Middleware
-app.use(cors());
+const corsOptions = {
+  origin: [
+    process.env.CLIENT_URL || 'http://localhost:3000',
+    'https://mortals-dashboard.vercel.app',
+    'https://mortals-dashboard-5akyflysd-braamakamaras-projects.vercel.app'
+  ],
+  credentials: true
+};
+app.use(cors(corsOptions));
 
 // Email transporter configuration (supports service OR custom SMTP)
 function createTransporter() {
