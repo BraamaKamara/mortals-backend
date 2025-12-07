@@ -65,6 +65,7 @@ async function authenticateToken(req, res, next) {
       email: decoded.email,
       username: session.rows[0].username
     };
+    req.userId = decoded.userId; // For backward compatibility
     req.token = token;
     next();
   } catch (error) {
