@@ -564,6 +564,83 @@ router.get('/identity-spiral-trend', async (req, res) => {
 });
 
 /**
+ * GET /api/reflection/moral-weight/:date
+ * Returns hourly breakdown and summary for the specified date
+ */
+router.get('/moral-weight/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    const userId = req.userId;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
+    }
+
+    // Aggregate presence samples by hour for the given date
+    const result = await db.query(
+      `SELECT 
+         EXTRACT(HOUR FROM timestamp) AS hour,
+         AVG(presence_score) AS avg_score,
+         COUNT(*) AS samples
+       FROM moral_presence_log
+       WHERE user_id = $1 AND DATE(timestamp) = $2
+       GROUP BY hour
+       ORDER BY hour ASC`,
+      [userId, date]
+    );
+
+    // Map average scores to tiers and points
+    const rows = result.rows || [];
+    const hours = Array.from({ length: 24 }, (_, h) => {
+      const match = rows.find(r => Number(r.hour) === h);
+      const avg = match ? Number(match.avg_score) : 0;
+      let tier = 'shallow';
+      let points = 1;
+
+      if (avg >= 80) { tier = 'ethical_generative'; points = 7; }
+      else if (avg >= 60) { tier = 'reflective'; points = 5; }
+      else if (avg >= 30) { tier = 'rich'; points = 3; }
+
+      return {
+        hour: h,
+        avg_score: Math.round(avg),
+        tier,
+        points
+      };
+    });
+
+    // Summaries
+    const summary = hours.reduce((acc, h) => {
+      acc.total_points += h.points;
+      acc.counts[h.tier] = (acc.counts[h.tier] || 0) + 1;
+      return acc;
+    }, { total_points: 0, counts: { shallow: 0, rich: 0, reflective: 0, ethical_generative: 0 } });
+
+    const totalHours = hours.length;
+    const pct = (n) => totalHours ? Math.round((n / totalHours) * 100) : 0;
+
+    res.json({
+      success: true,
+      date,
+      hours,
+      summary: {
+        total_points: summary.total_points,
+        max_points: 24 * 7,
+        quality_pct: Math.round((summary.total_points / (24 * 7)) * 100),
+        distribution: {
+          shallow: { hours: summary.counts.shallow, pct: pct(summary.counts.shallow) },
+          rich: { hours: summary.counts.rich, pct: pct(summary.counts.rich) },
+          reflective: { hours: summary.counts.reflective, pct: pct(summary.counts.reflective) },
+          ethical_generative: { hours: summary.counts.ethical_generative, pct: pct(summary.counts.ethical_generative) }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[Moral Weight] Error computing hourly tiers:', error);
+    res.status(500).json({ error: 'Failed to compute moral weight of moments' });
+  }
+});
+/**
  * Helper: Interpret spiral qualities in human-readable text
  */
 function interpretSpiral(continuity) {
