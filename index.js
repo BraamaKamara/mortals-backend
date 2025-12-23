@@ -29,8 +29,7 @@ const io = new Server(server, {
   cors: {
     origin: [
       process.env.CLIENT_URL || 'http://localhost:3000',
-      'https://mortals-dashboard.vercel.app',
-      'https://mortals-dashboard-braamakamaras-projects.vercel.app'
+      'https://mortals-dashboard.vercel.app'
     ],
     methods: ['GET', 'POST']
   }
@@ -44,8 +43,7 @@ const verificationCodes = new Map();
 const corsOptions = {
   origin: [
     process.env.CLIENT_URL || 'http://localhost:3000',
-    'https://mortals-dashboard.vercel.app',
-    'https://mortals-dashboard-braamakamaras-projects.vercel.app'
+    'https://mortals-dashboard.vercel.app'
   ],
   credentials: true
 };
