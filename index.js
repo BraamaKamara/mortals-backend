@@ -30,7 +30,7 @@ const io = new Server(server, {
     origin: [
       process.env.CLIENT_URL || 'http://localhost:3000',
       'https://mortals-dashboard.vercel.app',
-      'https://mortals-dashboard-5akyflysd-braamakamaras-projects.vercel.app'
+      'https://mortals-dashboard-braamakamaras-projects.vercel.app'
     ],
     methods: ['GET', 'POST']
   }
@@ -45,7 +45,7 @@ const corsOptions = {
   origin: [
     process.env.CLIENT_URL || 'http://localhost:3000',
     'https://mortals-dashboard.vercel.app',
-    'https://mortals-dashboard-5akyflysd-braamakamaras-projects.vercel.app'
+    'https://mortals-dashboard-braamakamaras-projects.vercel.app'
   ],
   credentials: true
 };
@@ -579,54 +579,59 @@ io.on('connection', (socket) => {
 // Make io available to routes
 app.set('io', io);
 
-// Start server with additional diagnostics to catch binding issues on Windows
-const HOST = process.env.HOST || '127.0.0.1';
-const serverInstance = server.listen(PORT, HOST, () => {
-  const addr = serverInstance.address();
-  const hostShown = typeof addr === 'string' ? addr : `${addr.address}:${addr.port}`;
-  console.log(`\n🔐 MORTALS Email Verification Service`);
-  console.log(`📧 Server running on http://${HOST}:${PORT}`);
-  console.log(`   Bound address: ${hostShown}`);
-  console.log(`✉️  Email service: ${process.env.EMAIL_SERVICE || 'gmail'}`);
-  console.log(`👤 Email user: ${process.env.EMAIL_USER || 'NOT CONFIGURED'}`);
-  console.log(`🔌 WebSocket enabled for real-time updates`);
-  console.log(`\n⏳ Ready to verify mortal email addresses...\n`);
-  // Verify transporter on startup in dev to catch credential issues early
-  const isDev = process.env.NODE_ENV !== 'production';
-  if (isDev) {
-    transporter.verify((err, success) => {
-      if (err) {
-        console.warn('[Email] Transport verification failed:', err.message);
-        if (err.code === 'EAUTH') {
-          console.warn('[Email] Hint: Check EMAIL_USER and EMAIL_PASSWORD. For Gmail, enable 2FA and use a 16-char App Password.');
+// Export handler for Vercel serverless; only start listener locally
+if (process.env.VERCEL) {
+  module.exports = app;
+} else {
+  // Start server with additional diagnostics to catch binding issues on Windows
+  const HOST = process.env.HOST || '127.0.0.1';
+  const serverInstance = server.listen(PORT, HOST, () => {
+    const addr = serverInstance.address();
+    const hostShown = typeof addr === 'string' ? addr : `${addr.address}:${addr.port}`;
+    console.log(`\n🔐 MORTALS Email Verification Service`);
+    console.log(`📧 Server running on http://${HOST}:${PORT}`);
+    console.log(`   Bound address: ${hostShown}`);
+    console.log(`✉️  Email service: ${process.env.EMAIL_SERVICE || 'gmail'}`);
+    console.log(`👤 Email user: ${process.env.EMAIL_USER || 'NOT CONFIGURED'}`);
+    console.log(`🔌 WebSocket enabled for real-time updates`);
+    console.log(`\n⏳ Ready to verify mortal email addresses...\n`);
+    // Verify transporter on startup in dev to catch credential issues early
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (isDev) {
+      transporter.verify((err, success) => {
+        if (err) {
+          console.warn('[Email] Transport verification failed:', err.message);
+          if (err.code === 'EAUTH') {
+            console.warn('[Email] Hint: Check EMAIL_USER and EMAIL_PASSWORD. For Gmail, enable 2FA and use a 16-char App Password.');
+          }
+        } else {
+          console.log('[Email] Transport verified and ready to send.');
         }
-      } else {
-        console.log('[Email] Transport verified and ready to send.');
-      }
-    });
-  }
-});
+      });
+    }
+  });
 
-server.on('error', (err) => {
-  console.error('[Server] Failed to start:', err.code || err.message);
-  if (err.code === 'EADDRINUSE') {
-    console.error(`[Server] Port ${PORT} is already in use. Set a different PORT in server/.env or stop the other process.`);
-  }
-});
+  server.on('error', (err) => {
+    console.error('[Server] Failed to start:', err.code || err.message);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`[Server] Port ${PORT} is already in use. Set a different PORT in server/.env or stop the other process.`);
+    }
+  });
 
-// Extra diagnostics for unexpected shutdowns
-process.on('exit', (code) => {
-  console.warn(`[Process] Exiting with code ${code}. If this was not intentional, check for earlier errors above.`);
-});
-process.on('uncaughtException', (err) => {
-  console.error('[Process] Uncaught exception:', err);
-});
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[Process] Unhandled rejection:', reason);
-});
+  // Extra diagnostics for unexpected shutdowns
+  process.on('exit', (code) => {
+    console.warn(`[Process] Exiting with code ${code}. If this was not intentional, check for earlier errors above.`);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('[Process] Uncaught exception:', err);
+  });
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('[Process] Unhandled rejection:', reason);
+  });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  process.exit(0);
-});
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    process.exit(0);
+  });
+}
