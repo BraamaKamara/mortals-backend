@@ -8,7 +8,7 @@
  * - Narrative continuity: From coherence of daily reflections
  */
 
-const db = require('../db');
+const db = require('./db');
 
 /**
  * Calculate psychological continuity dimensions for a given date
