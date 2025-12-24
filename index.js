@@ -1,6 +1,6 @@
 // MORTALS Dashboard - Email Verification Backend
 // Minimal Express server for email verification only
-// Version: 1.0.3 (McMahan Routes Deployment)
+// Version: 1.0.4 (Force Redeploy - Moral Weight Route)
 
 const express = require('express');
 const cors = require('cors');
